@@ -10,6 +10,12 @@ A basic AI-driven stock analysis application (MVP).
 - ARIMA-based price prediction
 - Data visualization
 
+## Setup
+
+- Add/edit stocks in `stocks.csv` (columns: Ticker, Name)
+- Run the script: `python stock_analyzer.py`
+- Select a stock from the list to analyze
+
 ## Installation
 
 1. Install dependencies: `pip install -r requirements.txt`
@@ -17,6 +23,4 @@ A basic AI-driven stock analysis application (MVP).
 
 ## Usage
 
-Modify the ticker in the script (e.g., 'AAPL') and run.
-
-This is a starting point for the full enterprise application.
+Modify `stocks.csv` to add/remove stocks. The script will prompt you to choose which stock to study.

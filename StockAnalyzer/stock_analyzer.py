@@ -58,10 +58,37 @@ class StockAnalyzer:
         plt.savefig('stock_analysis.png')
         print("Plot saved as stock_analysis.png")
 
+def load_stocks():
+    """Load stocks from CSV."""
+    try:
+        df = pd.read_csv('stocks.csv')
+        return df
+    except FileNotFoundError:
+        print("stocks.csv not found.")
+        return pd.DataFrame()
+
+def select_stock(stocks_df):
+    """Display stocks and let user select."""
+    print("Available stocks:")
+    for idx, row in stocks_df.iterrows():
+        print(f"{idx+1}. {row['Ticker']} - {row['Name']}")
+    choice = int(input("Enter the number of the stock to analyze: ")) - 1
+    if 0 <= choice < len(stocks_df):
+        return stocks_df.iloc[choice]['Ticker']
+    else:
+        print("Invalid choice.")
+        return None
+
 if __name__ == "__main__":
-    analyzer = StockAnalyzer('AAPL')
-    analyzer.fetch_data()
-    analyzer.analyze_financials()
-    analyzer.sentiment_analysis("Apple reported strong earnings growth.")
-    analyzer.predict_price()
-    analyzer.plot_data()
+    stocks_df = load_stocks()
+    if stocks_df.empty:
+        print("No stocks loaded.")
+        exit()
+    ticker = select_stock(stocks_df)
+    if ticker:
+        analyzer = StockAnalyzer(ticker)
+        analyzer.fetch_data()
+        analyzer.analyze_financials()
+        analyzer.sentiment_analysis("Apple reported strong earnings growth.")
+        analyzer.predict_price()
+        analyzer.plot_data()
