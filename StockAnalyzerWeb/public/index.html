@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gaurav Antigravity v2.0 | AI Stock Intelligence Dashboard</title>
+    <meta name="description" content="Real-time AI-powered stock analysis with Claude Sonnet, delivering institutional-grade Buy/Sell/Hold signals for Indian equities.">
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="glass-bg"></div>
+    
+    <header>
+        <div class="logo">
+            <span class="logo-icon">🚀</span>
+            <h1>GAURAV ANTIGRAVITY <span class="version-tag">v2.0</span></h1>
+        </div>
+        <div class="market-status" id="market-status">
+            <span class="status-dot"></span>
+            <span id="nifty-trend">Fetching Market Trend...</span>
+            <div id="last-global-update" style="font-size: 0.7rem; color: var(--text-dim); margin-top: 4px;">Last Updated: ---</div>
+        </div>
+    </header>
+
+    <main>
+        <!-- System Status Bar -->
+        <section class="system-status-bar glass" id="system-status-bar">
+            <div class="status-item">
+                <span class="status-label">Active LLM</span>
+                <span class="status-value" id="active-llm">Claude Sonnet</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Last Scan</span>
+                <span class="status-value" id="last-scan-time">---</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Scans Today</span>
+                <span class="status-value" id="scans-today">0</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Schedule</span>
+                <span class="status-value">Hourly 9-4 IST</span>
+            </div>
+        </section>
+
+        <!-- Performance Metrics -->
+        <section class="performance-section">
+            <div class="section-header">
+                <h2>📊 Prediction Performance</h2>
+            </div>
+            <div class="performance-grid">
+                <div class="perf-card glass" id="perf-accuracy">
+                    <div class="perf-icon">🎯</div>
+                    <div class="perf-value" id="accuracy-value">--</div>
+                    <div class="perf-label">Accuracy</div>
+                </div>
+                <div class="perf-card glass" id="perf-total">
+                    <div class="perf-icon">📈</div>
+                    <div class="perf-value" id="total-alerts-value">--</div>
+                    <div class="perf-label">Total Alerts (30d)</div>
+                </div>
+                <div class="perf-card glass" id="perf-wins">
+                    <div class="perf-icon">✅</div>
+                    <div class="perf-value" id="wins-value">--</div>
+                    <div class="perf-label">Successful</div>
+                </div>
+                <div class="perf-card glass" id="perf-confidence">
+                    <div class="perf-icon">🧠</div>
+                    <div class="perf-value" id="avg-confidence-value">--</div>
+                    <div class="perf-label">Avg Confidence</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="intelligence-hub">
+            <div class="section-header">
+                <h2>Intelligence Hub</h2>
+                <div class="controls">
+                    <button id="start-monitor-btn" class="control-btn secondary">🚀 Start Monitor</button>
+                    <button id="trigger-alert-btn" class="control-btn primary">🔔 Send Alert Manually</button>
+                    <button id="refresh-btn" class="refresh-btn">🔄 Refresh Dashboard</button>
+                </div>
+            </div>
+            
+            <div id="ai-report" class="ai-report-card glass">
+                <div class="report-header">
+                    <h3>🤖 Daily AI Intelligence Report</h3>
+                </div>
+                <div id="report-content" class="report-content">
+                    Loading latest insights...
+                </div>
+            </div>
+        </section>
+
+        <section class="alerts-section">
+            <div class="section-header">
+                <h2>Recent Alerts</h2>
+            </div>
+            <div id="alerts-grid" class="alerts-grid">
+                <!-- Alerts will be injected here -->
+                <div class="loading-shimmer"></div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="ticker-tape-container glass">
+            <div class="ticker-label">TOP TRENDING</div>
+            <div id="ticker-tape" class="ticker-tape">
+                <!-- Trending stocks will be injected here -->
+            </div>
+        </div>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>

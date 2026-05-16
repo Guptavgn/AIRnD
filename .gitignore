@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+.env
+
+# Databases
+*.db
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+StockAnalyzer/telegram_msg_ids.json
+StockAnalyzer/top_5_recommendations.csv
+StockAnalyzer/stock_analysis.png
+StockAnalyzerWeb/node_modules/
