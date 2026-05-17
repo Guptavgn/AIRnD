@@ -74,46 +74,51 @@ function sendSMS(to, body) {
 
 // Helper to send message via Telegram Bot (Fallback)
 function sendTelegramMessage(text) {
-    return new Promise((resolve, reject) => {
-        const botToken = process.env.TELEGRAM_BOT_TOKEN;
-        const chatId = process.env.TELEGRAM_CHAT_ID;
-        
-        if (!botToken || !chatId) {
-            return reject(new Error("Telegram credentials missing"));
-        }
-        
-        const postData = JSON.stringify({
-            chat_id: chatId,
-            text: text
-        });
-        
-        const options = {
-            hostname: 'api.telegram.org',
-            port: 443,
-            path: `/bot${botToken}/sendMessage`,
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Content-Length': postData.length
-            }
-        };
-        
-        const req = https.request(options, (res) => {
-            let data = '';
-            res.on('data', (chunk) => data += chunk);
-            res.on('end', () => {
-                if (res.statusCode >= 200 && res.statusCode < 300) {
-                    resolve(JSON.parse(data));
-                } else {
-                    reject(new Error(`Telegram error: ${res.statusCode} - ${data}`));
-                }
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    const chatId = process.env.TELEGRAM_CHAT_ID;
+    
+    if (!botToken || !chatId) {
+        return Promise.reject(new Error("Telegram credentials missing"));
+    }
+    
+    const chatIds = chatId.split(',').map(c => c.trim()).filter(Boolean);
+    const promises = chatIds.map(id => {
+        return new Promise((resolve, reject) => {
+            const postData = JSON.stringify({
+                chat_id: id,
+                text: text
             });
+            
+            const options = {
+                hostname: 'api.telegram.org',
+                port: 443,
+                path: `/bot${botToken}/sendMessage`,
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(postData)
+                }
+            };
+            
+            const req = https.request(options, (res) => {
+                let data = '';
+                res.on('data', (chunk) => data += chunk);
+                res.on('end', () => {
+                    if (res.statusCode >= 200 && res.statusCode < 300) {
+                        resolve(JSON.parse(data));
+                    } else {
+                        reject(new Error(`Telegram error: ${res.statusCode} - ${data}`));
+                    }
+                });
+            });
+            
+            req.on('error', (e) => reject(e));
+            req.write(postData);
+            req.end();
         });
-        
-        req.on('error', (e) => reject(e));
-        req.write(postData);
-        req.end();
     });
+    
+    return Promise.all(promises);
 }
 
 // Middleware: Require valid session token
@@ -175,6 +180,15 @@ app.post('/api/auth/verify-otp', (req, res) => {
     
     if (!normalizedPhone || (normalizedPhone !== normalizedTarget && normalizedPhone !== normalizedTarget.slice(-10))) {
         return res.status(400).json({ error: "Invalid phone number." });
+    }
+    
+    // 100% Free Option: DASHBOARD_PASSWORD passcode bypass
+    const staticPasscode = process.env.DASHBOARD_PASSWORD || '9891';
+    if (otp.trim() === staticPasscode) {
+        const token = crypto.randomBytes(32).toString('hex');
+        activeSessions.add(token);
+        console.log(`[AUTH] Session authorized via static passcode bypass for ${phone}`);
+        return res.json({ token });
     }
     
     const record = activeOTPs.get(normalizedPhone);
