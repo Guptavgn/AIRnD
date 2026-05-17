@@ -556,15 +556,22 @@ def load_stocks():
         return pd.DataFrame()
 
 def delete_previous_telegram_messages():
-    """Delete previously sent messages to keep the chat clean."""
+    """Delete previously sent messages to keep the chats clean."""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID: return
     try:
         if os.path.exists('telegram_msg_ids.json'):
             with open('telegram_msg_ids.json', 'r') as f:
-                msg_ids = json.load(f)
-            for msg_id in msg_ids:
+                msg_data = json.load(f)
+            for item in msg_data:
+                # Handle old format (simple integer) vs new format (list/tuple of [chat_id, msg_id])
+                if isinstance(item, list) or isinstance(item, tuple):
+                    chat_id, msg_id = item
+                else:
+                    chat_id = TELEGRAM_CHAT_ID.split(',')[0].strip() # Fallback to first chat ID
+                    msg_id = item
+                
                 url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/deleteMessage"
-                data = urllib.parse.urlencode({'chat_id': TELEGRAM_CHAT_ID, 'message_id': msg_id}).encode('utf-8')
+                data = urllib.parse.urlencode({'chat_id': chat_id, 'message_id': msg_id}).encode('utf-8')
                 try: urllib.request.urlopen(urllib.request.Request(url, data=data), timeout=5)
                 except: pass
             os.remove('telegram_msg_ids.json')
@@ -572,34 +579,42 @@ def delete_previous_telegram_messages():
         pass
 
 def send_telegram_message(message):
-    """Send notification via Telegram bot and track message ID."""
+    """Send notification via Telegram bot to all configured chat IDs and track message IDs."""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         return False
-    try:
-        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-        data = urllib.parse.urlencode({
-            'chat_id': TELEGRAM_CHAT_ID,
-            'text': message,
-            'parse_mode': 'HTML'
-        }).encode('utf-8')
-        request = urllib.request.Request(url, data=data)
-        with urllib.request.urlopen(request, timeout=15) as response:
-            result = json.loads(response.read().decode('utf-8'))
-        if result.get('ok'):
-            msg_id = result['result']['message_id']
-            try:
-                ids = []
-                if os.path.exists('telegram_msg_ids.json'):
-                    with open('telegram_msg_ids.json', 'r') as f: ids = json.load(f)
-                ids.append(msg_id)
-                with open('telegram_msg_ids.json', 'w') as f: json.dump(ids, f)
-            except: pass
-            print("Telegram message sent.")
-            return True
-        print("Telegram send failed:", result)
-    except Exception as e:
-        print("Telegram send error:", e)
-    return False
+    
+    # Support multiple comma-separated chat IDs
+    chat_ids = [c.strip() for c in TELEGRAM_CHAT_ID.split(',') if c.strip()]
+    success = False
+    
+    for chat_id in chat_ids:
+        try:
+            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+            data = urllib.parse.urlencode({
+                'chat_id': chat_id,
+                'text': message,
+                'parse_mode': 'HTML'
+            }).encode('utf-8')
+            request = urllib.request.Request(url, data=data)
+            with urllib.request.urlopen(request, timeout=15) as response:
+                result = json.loads(response.read().decode('utf-8'))
+            if result.get('ok'):
+                msg_id = result['result']['message_id']
+                try:
+                    ids = []
+                    if os.path.exists('telegram_msg_ids.json'):
+                        with open('telegram_msg_ids.json', 'r') as f: ids = json.load(f)
+                    ids.append([chat_id, msg_id])
+                    with open('telegram_msg_ids.json', 'w') as f: json.dump(ids, f)
+                except: pass
+                print(f"Telegram message sent to {chat_id}.")
+                success = True
+            else:
+                print(f"Telegram send failed for {chat_id}:", result)
+        except Exception as e:
+            print(f"Telegram send error for {chat_id}:", e)
+            
+    return success
 
 
 def send_notification(message):
