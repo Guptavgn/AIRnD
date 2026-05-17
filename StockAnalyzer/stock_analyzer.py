@@ -655,10 +655,10 @@ def get_market_overview():
         print("Market overview error:", e)
         return "📊 Market Data Refreshing..."
 
-def hourly_monitor():
+def hourly_monitor(ignore_weekend=False):
     """Gaurav Antigravity: Deep Intelligence Relay (Hourly: 9 AM - 4 PM IST, Mon-Fri)."""
     now = datetime.now(pytz.timezone('Asia/Kolkata'))
-    if now.weekday() >= 5:  # Skip weekends
+    if now.weekday() >= 5 and not ignore_weekend:  # Skip weekends
         print(f"Weekend skip: {now.strftime('%A %Y-%m-%d %H:%M')}")
         return
     print(f"--- Running Deep Intelligence Relay: {now.strftime('%Y-%m-%d %H:%M:%S')} ---")

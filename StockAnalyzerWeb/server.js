@@ -349,7 +349,7 @@ app.post('/api/start-monitor', (req, res) => {
 
 app.post('/api/trigger-analysis', (req, res) => {
     const pythonPath = PYTHON_PATH;
-    const cmd = 'from stock_analyzer import hourly_monitor; hourly_monitor()';
+    const cmd = 'from stock_analyzer import hourly_monitor; hourly_monitor(ignore_weekend=True)';
     spawn(pythonPath, ['-c', cmd], { cwd: STOCK_ANALYZER_DIR });
     systemStatus.lastScanTime = new Date().toISOString();
     systemStatus.totalScansToday++;
