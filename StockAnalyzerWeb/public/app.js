@@ -89,11 +89,11 @@ function injectLoginDOM() {
     <div class="login-box glass">
         <div class="login-logo">🔒</div>
         <h2>Private Dashboard</h2>
-        <p>This stock intelligence system is secure. Please authenticate using your registered Telegram Chat ID.</p>
+        <p>This stock intelligence system is secure. Please authenticate using your registered mobile number.</p>
         
         <div id="step-phone">
-            <input type="text" id="phone-input" class="login-input" placeholder="Enter Telegram Chat ID" value="8784050471" />
-            <button id="send-otp-btn" class="login-btn">Send OTP via Telegram</button>
+            <input type="text" id="phone-input" class="login-input" placeholder="Enter Mobile Number" value="9891399001" />
+            <button id="send-otp-btn" class="login-btn">Send OTP to Telegram Bot</button>
         </div>
         
         <div id="step-otp" style="display: none;">
@@ -117,9 +117,9 @@ function setupLoginListeners() {
     const succEl = document.getElementById('login-success');
 
     sendOtpBtn.addEventListener('click', async () => {
-        const telegramId = phoneInput.value.trim();
-        if (!telegramId) {
-            showError("Please enter a valid Telegram Chat ID.");
+        const phone = phoneInput.value.trim();
+        if (!phone) {
+            showError("Please enter a valid mobile number.");
             return;
         }
 
@@ -131,7 +131,7 @@ function setupLoginListeners() {
             const res = await originalFetch('/api/auth/send-otp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ telegramId })
+                body: JSON.stringify({ phone })
             });
             const data = await res.json();
             
@@ -142,17 +142,17 @@ function setupLoginListeners() {
             } else {
                 showError(data.error || "Failed to send OTP.");
                 sendOtpBtn.disabled = false;
-                sendOtpBtn.innerText = "Send OTP via Telegram";
+                sendOtpBtn.innerText = "Send OTP to Telegram Bot";
             }
         } catch (e) {
             showError("Network error. Please try again.");
             sendOtpBtn.disabled = false;
-            sendOtpBtn.innerText = "Send OTP via Telegram";
+            sendOtpBtn.innerText = "Send OTP to Telegram Bot";
         }
     });
 
     verifyOtpBtn.addEventListener('click', async () => {
-        const telegramId = phoneInput.value.trim();
+        const phone = phoneInput.value.trim();
         const otp = otpInput.value.trim();
         if (!otp) {
             showError("Please enter the OTP or passcode.");
@@ -167,7 +167,7 @@ function setupLoginListeners() {
             const res = await originalFetch('/api/auth/verify-otp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ telegramId, otp })
+                body: JSON.stringify({ phone, otp })
             });
             const data = await res.json();
             
@@ -212,9 +212,9 @@ function showLoginScreen() {
     document.getElementById('login-overlay').style.display = 'flex';
     document.getElementById('step-phone').style.display = 'block';
     document.getElementById('step-otp').style.display = 'none';
-    document.getElementById('phone-input').value = '8784050471';
+    document.getElementById('phone-input').value = '9891399001';
     document.getElementById('send-otp-btn').disabled = false;
-    document.getElementById('send-otp-btn').innerText = "Send OTP via Telegram";
+    document.getElementById('send-otp-btn').innerText = "Send OTP to Telegram Bot";
     document.getElementById('verify-otp-btn').disabled = false;
     document.getElementById('verify-otp-btn').innerText = "Verify and Enter";
     document.getElementById('otp-input').value = '';
