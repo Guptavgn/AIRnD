@@ -4,7 +4,11 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 class LearningEngine:
-    def __init__(self, db_path='d:/AIRnD/StockAnalyzerWeb/alerts.db'):
+    def __init__(self, db_path=None):
+        if db_path is None:
+            import os
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            db_path = os.getenv('DATABASE_PATH') or os.path.abspath(os.path.join(script_dir, '..', 'StockAnalyzerWeb', 'alerts.db'))
         self.db_path = db_path
 
     def update_past_performance(self):

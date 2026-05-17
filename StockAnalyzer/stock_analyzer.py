@@ -82,7 +82,10 @@ def sanitize_markdown(text):
     return text.replace('_', '\\_').replace('[', '').replace(']', '').replace('`', '')
 
 class DatabaseManager:
-    def __init__(self, db_path='d:/AIRnD/StockAnalyzerWeb/alerts.db'):
+    def __init__(self, db_path=None):
+        if db_path is None:
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            db_path = os.getenv('DATABASE_PATH') or os.path.abspath(os.path.join(script_dir, '..', 'StockAnalyzerWeb', 'alerts.db'))
         self.db_path = db_path
         self.init_db()
 

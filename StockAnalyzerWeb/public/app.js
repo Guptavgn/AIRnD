@@ -23,7 +23,9 @@ window.fetch = async function (resource, options = {}) {
         options.headers['Authorization'] = `Bearer ${token}`;
     }
     
-    const isApiCall = typeof resource === 'string' && resource.startsWith('/api/');
+    const url = typeof resource === 'string' ? resource : (resource && resource.url);
+    const isApiCall = url && (url.startsWith('/api/') || url.includes('/api/'));
+    
     const response = await originalFetch(resource, options);
     
     // Auto-logout and show login screen if server returns 401 Unauthorized

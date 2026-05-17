@@ -9,8 +9,23 @@ const https = require('https');
 const querystring = require('querystring');
 const crypto = require('crypto');
 
+const fs = require('fs');
+
 const STOCK_ANALYZER_DIR = process.env.STOCK_ANALYZER_DIR || path.resolve(__dirname, '../StockAnalyzer');
-const PYTHON_PATH = process.env.PYTHON_PATH || path.join(STOCK_ANALYZER_DIR, 'venv', 'Scripts', 'python.exe');
+
+let PYTHON_PATH = process.env.PYTHON_PATH;
+if (!PYTHON_PATH) {
+    const isWindows = process.platform === 'win32';
+    const venvPath = isWindows
+        ? path.join(STOCK_ANALYZER_DIR, 'venv', 'Scripts', 'python.exe')
+        : path.join(STOCK_ANALYZER_DIR, 'venv', 'bin', 'python');
+    
+    if (fs.existsSync(venvPath)) {
+        PYTHON_PATH = venvPath;
+    } else {
+        PYTHON_PATH = isWindows ? 'python' : 'python3';
+    }
+}
 
 const app = express();
 const port = process.env.PORT || 3000;
