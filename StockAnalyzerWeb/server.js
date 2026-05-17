@@ -132,54 +132,102 @@ function requireAuth(req, res, next) {
     res.status(401).json({ error: "Unauthorized" });
 }
 
+// Helper to send message to a single Telegram ID (OTP Delivery)
+function sendTelegramMessageToId(chatId, text) {
+    return new Promise((resolve, reject) => {
+        const botToken = process.env.TELEGRAM_BOT_TOKEN;
+        if (!botToken) {
+            return reject(new Error("Telegram bot token missing"));
+        }
+        
+        const postData = JSON.stringify({
+            chat_id: chatId,
+            text: text
+        });
+        
+        const options = {
+            hostname: 'api.telegram.org',
+            port: 443,
+            path: `/bot${botToken}/sendMessage`,
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(postData)
+            }
+        };
+        
+        const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', (chunk) => data += chunk);
+            res.on('end', () => {
+                if (res.statusCode >= 200 && res.statusCode < 300) {
+                    resolve(JSON.parse(data));
+                } else {
+                    reject(new Error(`Telegram error: ${res.statusCode} - ${data}`));
+                }
+            });
+        });
+        
+        req.on('error', (e) => reject(e));
+        req.write(postData);
+        req.end();
+    });
+}
+
 // Auth endpoints
 app.post('/api/auth/send-otp', async (req, res) => {
-    const { phone } = req.body;
-    const targetPhone = process.env.TARGET_PHONE_NUMBER || '9891399001';
+    const { telegramId } = req.body;
     
-    const normalizedPhone = phone ? phone.trim().replace(/[\s\-\+]/g, '') : '';
-    const normalizedTarget = targetPhone.trim().replace(/[\s\-\+]/g, '');
+    if (!telegramId) {
+        return res.status(400).json({ error: "Telegram Chat ID is required." });
+    }
     
-    if (!normalizedPhone || (normalizedPhone !== normalizedTarget && normalizedPhone !== normalizedTarget.slice(-10))) {
-        return res.status(400).json({ error: "Access Denied: Unregistered phone number." });
+    const configuredChatIds = (process.env.TELEGRAM_CHAT_ID || '8784050471,842914003')
+        .split(',')
+        .map(c => c.trim())
+        .filter(Boolean);
+        
+    const requestedId = telegramId.trim();
+    
+    if (!configuredChatIds.includes(requestedId)) {
+        return res.status(400).json({ error: "Access Denied: Unregistered Telegram Chat ID." });
     }
     
     // Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    activeOTPs.set(normalizedPhone, {
+    activeOTPs.set(requestedId, {
         otp: otp,
         expires: Date.now() + 5 * 60 * 1000
     });
     
     const message = `🔒 Gaurav Antigravity OTP: ${otp}. Valid for 5 minutes.`;
-    console.log(`[AUTH] Generated OTP ${otp} for ${phone}`);
+    console.log(`[AUTH] Generated OTP ${otp} for Telegram ID ${requestedId}`);
     
     try {
-        // Try Twilio SMS
-        await sendSMS(phone, message);
-        res.json({ message: "OTP sent successfully via SMS to " + phone });
+        await sendTelegramMessageToId(requestedId, message);
+        res.json({ message: "OTP sent successfully to your Telegram chat!" });
     } catch (err) {
-        console.warn(`[AUTH] Twilio failed (${err.message}). Trying Telegram Bot fallback...`);
-        try {
-            // Fallback to Telegram Bot
-            await sendTelegramMessage(`🔑 [Security Fallback] OTP requested for Private Dashboard by ${phone}:\n\nCode: ${otp}`);
-            res.json({ message: "SMS service unavailable. OTP sent to your Telegram Bot as security fallback!" });
-        } catch (tgErr) {
-            console.error("[AUTH] Both Twilio and Telegram failed to send OTP", tgErr.message);
-            res.status(500).json({ error: "Failed to send OTP. Please check server logs." });
-        }
+        console.error("[AUTH] Failed to send Telegram OTP", err.message);
+        res.status(500).json({ error: "Failed to send Telegram message. Please check server logs." });
     }
 });
 
 app.post('/api/auth/verify-otp', (req, res) => {
-    const { phone, otp } = req.body;
-    const targetPhone = process.env.TARGET_PHONE_NUMBER || '9891399001';
+    const { telegramId, otp } = req.body;
     
-    const normalizedPhone = phone ? phone.trim().replace(/[\s\-\+]/g, '') : '';
-    const normalizedTarget = targetPhone.trim().replace(/[\s\-\+]/g, '');
+    if (!telegramId) {
+        return res.status(400).json({ error: "Telegram Chat ID is required." });
+    }
     
-    if (!normalizedPhone || (normalizedPhone !== normalizedTarget && normalizedPhone !== normalizedTarget.slice(-10))) {
-        return res.status(400).json({ error: "Invalid phone number." });
+    const configuredChatIds = (process.env.TELEGRAM_CHAT_ID || '8784050471,842914003')
+        .split(',')
+        .map(c => c.trim())
+        .filter(Boolean);
+        
+    const requestedId = telegramId.trim();
+    
+    if (!configuredChatIds.includes(requestedId)) {
+        return res.status(400).json({ error: "Invalid Telegram Chat ID." });
     }
     
     // 100% Free Option: DASHBOARD_PASSWORD passcode bypass
@@ -187,17 +235,17 @@ app.post('/api/auth/verify-otp', (req, res) => {
     if (otp.trim() === staticPasscode) {
         const token = crypto.randomBytes(32).toString('hex');
         activeSessions.add(token);
-        console.log(`[AUTH] Session authorized via static passcode bypass for ${phone}`);
+        console.log(`[AUTH] Session authorized via static passcode bypass for Telegram ID ${requestedId}`);
         return res.json({ token });
     }
     
-    const record = activeOTPs.get(normalizedPhone);
+    const record = activeOTPs.get(requestedId);
     if (!record) {
         return res.status(400).json({ error: "OTP not requested or expired." });
     }
     
     if (Date.now() > record.expires) {
-        activeOTPs.delete(normalizedPhone);
+        activeOTPs.delete(requestedId);
         return res.status(400).json({ error: "OTP has expired. Request a new one." });
     }
     
@@ -206,11 +254,11 @@ app.post('/api/auth/verify-otp', (req, res) => {
     }
     
     // Clear OTP & generate session token
-    activeOTPs.delete(normalizedPhone);
+    activeOTPs.delete(requestedId);
     const token = crypto.randomBytes(32).toString('hex');
     activeSessions.add(token);
     
-    console.log(`[AUTH] Session authorized for ${phone}`);
+    console.log(`[AUTH] Session authorized for Telegram ID ${requestedId}`);
     res.json({ token });
 });
 
