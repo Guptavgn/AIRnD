@@ -1,4 +1,232 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // 1. Inject DOM structure and CSS for premium login overlay
+    injectLoginDOM();
+
+    // 2. Setup button action handlers
+    setupLoginListeners();
+
+    // 3. Check if user is already authenticated
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+        showLoginScreen();
+    } else {
+        initDashboard();
+    }
+});
+
+// Intercept all fetch calls globally to attach auth headers
+const originalFetch = window.fetch;
+window.fetch = async function (resource, options = {}) {
+    options.headers = options.headers || {};
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+        options.headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    const isApiCall = typeof resource === 'string' && resource.startsWith('/api/');
+    const response = await originalFetch(resource, options);
+    
+    // Auto-logout and show login screen if server returns 401 Unauthorized
+    if (isApiCall && response.status === 401) {
+        localStorage.removeItem('auth_token');
+        showLoginScreen();
+    }
+    
+    return response;
+};
+
+function injectLoginDOM() {
+    const style = document.createElement('style');
+    style.textContent = `
+    .login-overlay {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(8, 12, 24, 0.96); backdrop-filter: blur(15px);
+        z-index: 100000; display: flex; justify-content: center; align-items: center;
+        font-family: 'Outfit', sans-serif; transition: all 0.3s ease;
+    }
+    .login-box {
+        width: 95%; max-width: 420px; padding: 40px 30px; border-radius: 24px;
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+        text-align: center;
+    }
+    .login-box h2 { font-size: 1.8rem; color: #fff; margin-bottom: 8px; font-weight: 700; letter-spacing: 0.5px; }
+    .login-box p { font-size: 0.9rem; color: rgba(255, 255, 255, 0.5); margin-bottom: 25px; line-height: 1.5; }
+    .login-input {
+        width: 100%; padding: 14px 18px; border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.04); color: #fff;
+        font-size: 1.05rem; margin-bottom: 18px; outline: none; box-sizing: border-box;
+        transition: all 0.3s;
+        text-align: center;
+    }
+    .login-input:focus { border-color: #6366f1; background: rgba(255, 255, 255, 0.07); }
+    .login-btn {
+        width: 100%; padding: 14px; border-radius: 12px; border: none;
+        background: #6366f1; color: #fff; font-weight: 600; font-size: 1rem;
+        cursor: pointer; transition: all 0.3s;
+    }
+    .login-btn:hover { background: #4f46e5; box-shadow: 0 0 20px rgba(99, 102, 241, 0.45); }
+    .login-btn:disabled { background: rgba(99, 102, 241, 0.4); cursor: not-allowed; }
+    .login-error { color: #f87171; font-size: 0.85rem; margin-top: 14px; display: none; line-height: 1.4; }
+    .login-success { color: #34d399; font-size: 0.85rem; margin-top: 14px; display: none; line-height: 1.4; }
+    .login-logo { font-size: 3rem; margin-bottom: 15px; display: inline-block; animation: pulse 2s infinite; }
+    @keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.08); }
+        100% { transform: scale(1); }
+    }
+    `;
+    document.head.appendChild(style);
+
+    const overlay = document.createElement('div');
+    overlay.className = 'login-overlay';
+    overlay.id = 'login-overlay';
+    overlay.style.display = 'none';
+
+    overlay.innerHTML = `
+    <div class="login-box glass">
+        <div class="login-logo">🔒</div>
+        <h2>Private Dashboard</h2>
+        <p>This stock intelligence system is secure. Please authenticate using your registered mobile number.</p>
+        
+        <div id="step-phone">
+            <input type="text" id="phone-input" class="login-input" placeholder="Enter Mobile Number" value="9891399001" />
+            <button id="send-otp-btn" class="login-btn">Send OTP via SMS</button>
+        </div>
+        
+        <div id="step-otp" style="display: none;">
+            <input type="text" id="otp-input" class="login-input" placeholder="Enter 6-Digit OTP" maxlength="6" />
+            <button id="verify-otp-btn" class="login-btn">Verify and Enter</button>
+        </div>
+        
+        <div id="login-error" class="login-error"></div>
+        <div id="login-success" class="login-success"></div>
+    </div>
+    `;
+    document.body.appendChild(overlay);
+}
+
+function setupLoginListeners() {
+    const sendOtpBtn = document.getElementById('send-otp-btn');
+    const verifyOtpBtn = document.getElementById('verify-otp-btn');
+    const phoneInput = document.getElementById('phone-input');
+    const otpInput = document.getElementById('otp-input');
+    const errEl = document.getElementById('login-error');
+    const succEl = document.getElementById('login-success');
+
+    sendOtpBtn.addEventListener('click', async () => {
+        const phone = phoneInput.value.trim();
+        if (!phone) {
+            showError("Please enter a valid mobile number.");
+            return;
+        }
+
+        sendOtpBtn.disabled = true;
+        sendOtpBtn.innerText = "Sending OTP...";
+        hideError();
+
+        try {
+            const res = await originalFetch('/api/auth/send-otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone })
+            });
+            const data = await res.json();
+            
+            if (res.ok) {
+                showSuccess(data.message);
+                document.getElementById('step-phone').style.display = 'none';
+                document.getElementById('step-otp').style.display = 'block';
+            } else {
+                showError(data.error || "Failed to send OTP.");
+                sendOtpBtn.disabled = false;
+                sendOtpBtn.innerText = "Send OTP via SMS";
+            }
+        } catch (e) {
+            showError("Network error. Please try again.");
+            sendOtpBtn.disabled = false;
+            sendOtpBtn.innerText = "Send OTP via SMS";
+        }
+    });
+
+    verifyOtpBtn.addEventListener('click', async () => {
+        const phone = phoneInput.value.trim();
+        const otp = otpInput.value.trim();
+        if (!otp || otp.length !== 6) {
+            showError("Please enter a valid 6-digit OTP.");
+            return;
+        }
+
+        verifyOtpBtn.disabled = true;
+        verifyOtpBtn.innerText = "Verifying...";
+        hideError();
+
+        try {
+            const res = await originalFetch('/api/auth/verify-otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone, otp })
+            });
+            const data = await res.json();
+            
+            if (res.ok && data.token) {
+                localStorage.setItem('auth_token', data.token);
+                showSuccess("Authorized! Entering dashboard...");
+                setTimeout(() => {
+                    hideLoginScreen();
+                    initDashboard();
+                }, 1000);
+            } else {
+                showError(data.error || "Incorrect or expired OTP.");
+                verifyOtpBtn.disabled = false;
+                verifyOtpBtn.innerText = "Verify and Enter";
+            }
+        } catch (e) {
+            showError("Network error. Please try again.");
+            verifyOtpBtn.disabled = false;
+            verifyOtpBtn.innerText = "Verify and Enter";
+        }
+    });
+
+    function showError(msg) {
+        errEl.innerText = msg;
+        errEl.style.display = 'block';
+        succEl.style.display = 'none';
+    }
+
+    function showSuccess(msg) {
+        succEl.innerText = msg;
+        succEl.style.display = 'block';
+        errEl.style.display = 'none';
+    }
+
+    function hideError() {
+        errEl.style.display = 'none';
+        succEl.style.display = 'none';
+    }
+}
+
+function showLoginScreen() {
+    document.getElementById('login-overlay').style.display = 'flex';
+    document.getElementById('step-phone').style.display = 'block';
+    document.getElementById('step-otp').style.display = 'none';
+    document.getElementById('phone-input').value = '9891399001';
+    document.getElementById('send-otp-btn').disabled = false;
+    document.getElementById('send-otp-btn').innerText = "Send OTP via SMS";
+    document.getElementById('verify-otp-btn').disabled = false;
+    document.getElementById('verify-otp-btn').innerText = "Verify and Enter";
+    document.getElementById('otp-input').value = '';
+    document.getElementById('login-error').style.display = 'none';
+    document.getElementById('login-success').style.display = 'none';
+}
+
+function hideLoginScreen() {
+    document.getElementById('login-overlay').style.display = 'none';
+}
+
+function initDashboard() {
     fetchAlerts();
     fetchPerformance();
     fetchSystemStatus();
@@ -14,20 +242,35 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }, 900000); 
     
-    document.getElementById('refresh-btn').addEventListener('click', async () => {
-        const btn = document.getElementById('refresh-btn');
-        const originalContent = btn.innerHTML;
-        btn.innerHTML = '⌛ Refreshing...';
-        btn.classList.add('spinning');
-        
-        await Promise.all([fetchAlerts(), fetchPerformance(), fetchSystemStatus()]);
-        
-        btn.innerHTML = originalContent;
-        btn.classList.remove('spinning');
-    });
-    document.getElementById('start-monitor-btn').addEventListener('click', () => controlAction('/api/start-monitor', '🚀 Start Monitor'));
-    document.getElementById('trigger-alert-btn').addEventListener('click', () => controlAction('/api/trigger-analysis', '🔔 Send Alert Manually'));
-});
+    // Event listener tracking to prevent duplicate bindings
+    const refreshBtn = document.getElementById('refresh-btn');
+    if (refreshBtn && !refreshBtn.dataset.bound) {
+        refreshBtn.dataset.bound = "true";
+        refreshBtn.addEventListener('click', async () => {
+            const btn = document.getElementById('refresh-btn');
+            const originalContent = btn.innerHTML;
+            btn.innerHTML = '⌛ Refreshing...';
+            btn.classList.add('spinning');
+            
+            await Promise.all([fetchAlerts(), fetchPerformance(), fetchSystemStatus()]);
+            
+            btn.innerHTML = originalContent;
+            btn.classList.remove('spinning');
+        });
+    }
+
+    const startMonitorBtn = document.getElementById('start-monitor-btn');
+    if (startMonitorBtn && !startMonitorBtn.dataset.bound) {
+        startMonitorBtn.dataset.bound = "true";
+        startMonitorBtn.addEventListener('click', () => controlAction('/api/start-monitor', '🚀 Start Monitor'));
+    }
+
+    const triggerAlertBtn = document.getElementById('trigger-alert-btn');
+    if (triggerAlertBtn && !triggerAlertBtn.dataset.bound) {
+        triggerAlertBtn.dataset.bound = "true";
+        triggerAlertBtn.addEventListener('click', () => controlAction('/api/trigger-analysis', '🔔 Send Alert Manually'));
+    }
+}
 
 async function controlAction(url, originalText) {
     const btn = document.activeElement;
@@ -76,7 +319,6 @@ async function fetchSystemStatus() {
 }
 
 async function fetchAlerts() {
-    const grid = document.getElementById('alerts-grid');
     const reportContent = document.getElementById('report-content');
 
     try {
@@ -86,7 +328,6 @@ async function fetchAlerts() {
         if (data.message === 'success' && data.data) {
             renderAlerts(data.data);
             
-            // Fetch live prices for these tickers
             const tickers = data.data.map(a => a.ticker).join(',');
             if (tickers) fetchLatestPrices(tickers);
 
@@ -102,12 +343,10 @@ async function fetchAlerts() {
                 `;
             }
 
-            // Update Ticker Tape
             const trendResponse = await fetch('/api/market-trending');
             const trendObj = await trendResponse.json();
             renderTickerTape(trendObj.data);
 
-            // Update Header Trend (using RELIANCE as a proxy if Nifty isn't explicit)
             if (trendObj.data && trendObj.data.length > 0) {
                 const rel = trendObj.data.find(s => s.ticker === 'RELIANCE.NS') || trendObj.data[0];
                 const color = rel.change >= 0 ? '#10b981' : '#ef4444';
@@ -115,7 +354,6 @@ async function fetchAlerts() {
                 document.getElementById('nifty-trend').innerHTML = `Market: <span style="color:${color}">${sign}${rel.change}%</span>`;
             }
 
-            // Update Global Refresh Timestamp
             const now = new Date();
             const dateStr = now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
             const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -216,7 +454,6 @@ async function fetchLatestPrices(tickers) {
                 el.innerText = `₹${newPrice.toFixed(2)}`;
                 if (tag) tag.style.display = 'block';
                 
-                // Visual feedback for price change
                 if (newPrice > oldPrice) el.style.color = 'var(--buy-text)';
                 else if (newPrice < oldPrice) el.style.color = 'var(--sell-text)';
                 

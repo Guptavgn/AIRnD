@@ -5,6 +5,9 @@ const cron = require('node-cron');
 const { spawn } = require('child_process');
 const db = require('./database');
 const path = require('path');
+const https = require('https');
+const querystring = require('querystring');
+const crypto = require('crypto');
 
 const STOCK_ANALYZER_DIR = process.env.STOCK_ANALYZER_DIR || path.resolve(__dirname, '../StockAnalyzer');
 const PYTHON_PATH = process.env.PYTHON_PATH || path.join(STOCK_ANALYZER_DIR, 'venv', 'Scripts', 'python.exe');
@@ -15,6 +18,196 @@ const port = process.env.PORT || 3000;
 app.use(cors());
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
+// --- AUTHENTICATION STACK ---
+const activeSessions = new Set();
+const activeOTPs = new Map(); // phone -> { otp, expires }
+
+// Helper to send SMS via Twilio
+function sendSMS(to, body) {
+    return new Promise((resolve, reject) => {
+        const accountSid = process.env.TWILIO_ACCOUNT_SID;
+        const authToken = process.env.TWILIO_AUTH_TOKEN;
+        const fromNumber = process.env.TWILIO_PHONE_NUMBER;
+
+        if (!accountSid || !authToken || !fromNumber) {
+            return reject(new Error("Twilio credentials missing"));
+        }
+
+        const postData = querystring.stringify({
+            To: to,
+            From: fromNumber,
+            Body: body
+        });
+
+        const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+
+        const options = {
+            hostname: 'api.twilio.com',
+            port: 443,
+            path: `/2010-04-01/Accounts/${accountSid}/Messages.json`,
+            method: 'POST',
+            headers: {
+                'Authorization': `Basic ${auth}`,
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Content-Length': postData.length
+            }
+        };
+
+        const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', (chunk) => data += chunk);
+            res.on('end', () => {
+                if (res.statusCode >= 200 && res.statusCode < 300) {
+                    resolve(JSON.parse(data));
+                } else {
+                    reject(new Error(`Twilio error: ${res.statusCode} - ${data}`));
+                }
+            });
+        });
+
+        req.on('error', (e) => reject(e));
+        req.write(postData);
+        req.end();
+    });
+}
+
+// Helper to send message via Telegram Bot (Fallback)
+function sendTelegramMessage(text) {
+    return new Promise((resolve, reject) => {
+        const botToken = process.env.TELEGRAM_BOT_TOKEN;
+        const chatId = process.env.TELEGRAM_CHAT_ID;
+        
+        if (!botToken || !chatId) {
+            return reject(new Error("Telegram credentials missing"));
+        }
+        
+        const postData = JSON.stringify({
+            chat_id: chatId,
+            text: text
+        });
+        
+        const options = {
+            hostname: 'api.telegram.org',
+            port: 443,
+            path: `/bot${botToken}/sendMessage`,
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': postData.length
+            }
+        };
+        
+        const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', (chunk) => data += chunk);
+            res.on('end', () => {
+                if (res.statusCode >= 200 && res.statusCode < 300) {
+                    resolve(JSON.parse(data));
+                } else {
+                    reject(new Error(`Telegram error: ${res.statusCode} - ${data}`));
+                }
+            });
+        });
+        
+        req.on('error', (e) => reject(e));
+        req.write(postData);
+        req.end();
+    });
+}
+
+// Middleware: Require valid session token
+function requireAuth(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    
+    if (token && activeSessions.has(token)) {
+        return next();
+    }
+    res.status(401).json({ error: "Unauthorized" });
+}
+
+// Auth endpoints
+app.post('/api/auth/send-otp', async (req, res) => {
+    const { phone } = req.body;
+    const targetPhone = process.env.TARGET_PHONE_NUMBER || '9891399001';
+    
+    const normalizedPhone = phone ? phone.trim().replace(/[\s\-\+]/g, '') : '';
+    const normalizedTarget = targetPhone.trim().replace(/[\s\-\+]/g, '');
+    
+    if (!normalizedPhone || (normalizedPhone !== normalizedTarget && normalizedPhone !== normalizedTarget.slice(-10))) {
+        return res.status(400).json({ error: "Access Denied: Unregistered phone number." });
+    }
+    
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    activeOTPs.set(normalizedPhone, {
+        otp: otp,
+        expires: Date.now() + 5 * 60 * 1000
+    });
+    
+    const message = `🔒 Gaurav Antigravity OTP: ${otp}. Valid for 5 minutes.`;
+    console.log(`[AUTH] Generated OTP ${otp} for ${phone}`);
+    
+    try {
+        // Try Twilio SMS
+        await sendSMS(phone, message);
+        res.json({ message: "OTP sent successfully via SMS to " + phone });
+    } catch (err) {
+        console.warn(`[AUTH] Twilio failed (${err.message}). Trying Telegram Bot fallback...`);
+        try {
+            // Fallback to Telegram Bot
+            await sendTelegramMessage(`🔑 [Security Fallback] OTP requested for Private Dashboard by ${phone}:\n\nCode: ${otp}`);
+            res.json({ message: "SMS service unavailable. OTP sent to your Telegram Bot as security fallback!" });
+        } catch (tgErr) {
+            console.error("[AUTH] Both Twilio and Telegram failed to send OTP", tgErr.message);
+            res.status(500).json({ error: "Failed to send OTP. Please check server logs." });
+        }
+    }
+});
+
+app.post('/api/auth/verify-otp', (req, res) => {
+    const { phone, otp } = req.body;
+    const targetPhone = process.env.TARGET_PHONE_NUMBER || '9891399001';
+    
+    const normalizedPhone = phone ? phone.trim().replace(/[\s\-\+]/g, '') : '';
+    const normalizedTarget = targetPhone.trim().replace(/[\s\-\+]/g, '');
+    
+    if (!normalizedPhone || (normalizedPhone !== normalizedTarget && normalizedPhone !== normalizedTarget.slice(-10))) {
+        return res.status(400).json({ error: "Invalid phone number." });
+    }
+    
+    const record = activeOTPs.get(normalizedPhone);
+    if (!record) {
+        return res.status(400).json({ error: "OTP not requested or expired." });
+    }
+    
+    if (Date.now() > record.expires) {
+        activeOTPs.delete(normalizedPhone);
+        return res.status(400).json({ error: "OTP has expired. Request a new one." });
+    }
+    
+    if (record.otp !== otp.trim()) {
+        return res.status(400).json({ error: "Incorrect OTP." });
+    }
+    
+    // Clear OTP & generate session token
+    activeOTPs.delete(normalizedPhone);
+    const token = crypto.randomBytes(32).toString('hex');
+    activeSessions.add(token);
+    
+    console.log(`[AUTH] Session authorized for ${phone}`);
+    res.json({ token });
+});
+
+// Protect all /api endpoints except auth
+app.use('/api', (req, res, next) => {
+    if (req.path.startsWith('/auth/')) {
+        return next();
+    }
+    requireAuth(req, res, next);
+});
+// -------------------------------------
 
 // Track system status
 let systemStatus = {
@@ -148,7 +341,6 @@ cron.schedule('0 0 * * *', () => {
 });
 
 // Hourly Intelligence Scan (9 AM - 4 PM IST, Mon-Fri)
-// Using node-cron with local system time (IST): minute 0, hours 9-16, Mon-Fri
 cron.schedule('0 9-16 * * 1-5', () => {
     console.log(`Executing Hourly Market Scan (Local Time: ${new Date().toLocaleTimeString()})...`);
     const pythonPath = PYTHON_PATH;
@@ -262,5 +454,5 @@ app.get('/api/market-trending', (req, res) => {
 app.listen(port, () => {
     console.log(`Gaurav Antigravity v2.0 Server running on port ${port}`);
     console.log(`LLM Chain: Claude Sonnet → Gemini → Groq → Local Rules`);
-    console.log(`Schedule: Hourly 9AM-4PM IST Mon-Fri`);
+    console.log(`Security: Active on TARGET_PHONE_NUMBER`);
 });
