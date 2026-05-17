@@ -350,10 +350,24 @@ app.post('/api/start-monitor', (req, res) => {
 app.post('/api/trigger-analysis', (req, res) => {
     const pythonPath = PYTHON_PATH;
     const cmd = 'from stock_analyzer import hourly_monitor; hourly_monitor(ignore_weekend=True)';
-    spawn(pythonPath, ['-c', cmd], { cwd: STOCK_ANALYZER_DIR });
-    systemStatus.lastScanTime = new Date().toISOString();
-    systemStatus.totalScansToday++;
-    res.json({ "message": "Manual analysis triggered (Claude Sonnet). Dashboard will update shortly." });
+    const py = spawn(pythonPath, ['-c', cmd], { cwd: STOCK_ANALYZER_DIR });
+    
+    let stdout = '';
+    let stderr = '';
+    py.stdout.on('data', (data) => stdout += data);
+    py.stderr.on('data', (data) => stderr += data);
+    
+    py.on('close', (code) => {
+        systemStatus.lastScanTime = new Date().toISOString();
+        systemStatus.totalScansToday++;
+        console.log(`[Python Trigger] Finished with code ${code}.\nSTDOUT: ${stdout}\nSTDERR: ${stderr}`);
+        res.json({
+            message: "Manual analysis execution logs",
+            code: code,
+            stdout: stdout,
+            stderr: stderr
+        });
+    });
 });
 
 // Cleanup old records (daily at midnight)
