@@ -83,9 +83,7 @@ function injectLoginDOM() {
     const overlay = document.createElement('div');
     overlay.className = 'login-overlay';
     overlay.id = 'login-overlay';
-    overlay.style.display = 'none';
-
-    overlay.innerHTML = `
+    overlay.style.display = 'none';    overlay.innerHTML = `
     <div class="login-box glass">
         <div class="login-logo">🔒</div>
         <h2>Private Dashboard</h2>
@@ -93,12 +91,7 @@ function injectLoginDOM() {
         
         <div id="step-phone">
             <input type="text" id="phone-input" class="login-input" placeholder="Enter Mobile Number" value="9891399001" />
-            <button id="send-otp-btn" class="login-btn">Send OTP to Telegram Bot</button>
-        </div>
-        
-        <div id="step-otp" style="display: none;">
-            <input type="text" id="otp-input" class="login-input" placeholder="Enter OTP or Passcode" />
-            <button id="verify-otp-btn" class="login-btn">Verify and Enter</button>
+            <button id="login-btn" class="login-btn">Authenticate & Enter</button>
         </div>
         
         <div id="login-error" class="login-error"></div>
@@ -109,65 +102,29 @@ function injectLoginDOM() {
 }
 
 function setupLoginListeners() {
-    const sendOtpBtn = document.getElementById('send-otp-btn');
-    const verifyOtpBtn = document.getElementById('verify-otp-btn');
+    const loginBtn = document.getElementById('login-btn');
     const phoneInput = document.getElementById('phone-input');
-    const otpInput = document.getElementById('otp-input');
     const errEl = document.getElementById('login-error');
     const succEl = document.getElementById('login-success');
 
-    sendOtpBtn.addEventListener('click', async () => {
+    if (!loginBtn) return;
+
+    loginBtn.addEventListener('click', async () => {
         const phone = phoneInput.value.trim();
         if (!phone) {
             showError("Please enter a valid mobile number.");
             return;
         }
 
-        sendOtpBtn.disabled = true;
-        sendOtpBtn.innerText = "Sending OTP...";
+        loginBtn.disabled = true;
+        loginBtn.innerText = "Authenticating...";
         hideError();
 
         try {
-            const res = await originalFetch('/api/auth/send-otp', {
+            const res = await originalFetch('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ phone })
-            });
-            const data = await res.json();
-            
-            if (res.ok) {
-                showSuccess(data.message);
-                document.getElementById('step-phone').style.display = 'none';
-                document.getElementById('step-otp').style.display = 'block';
-            } else {
-                showError(data.error || "Failed to send OTP.");
-                sendOtpBtn.disabled = false;
-                sendOtpBtn.innerText = "Send OTP to Telegram Bot";
-            }
-        } catch (e) {
-            showError("Network error. Please try again.");
-            sendOtpBtn.disabled = false;
-            sendOtpBtn.innerText = "Send OTP to Telegram Bot";
-        }
-    });
-
-    verifyOtpBtn.addEventListener('click', async () => {
-        const phone = phoneInput.value.trim();
-        const otp = otpInput.value.trim();
-        if (!otp) {
-            showError("Please enter the OTP or passcode.");
-            return;
-        }
-
-        verifyOtpBtn.disabled = true;
-        verifyOtpBtn.innerText = "Verifying...";
-        hideError();
-
-        try {
-            const res = await originalFetch('/api/auth/verify-otp', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phone, otp })
             });
             const data = await res.json();
             
@@ -179,14 +136,14 @@ function setupLoginListeners() {
                     initDashboard();
                 }, 1000);
             } else {
-                showError(data.error || "Incorrect or expired OTP.");
-                verifyOtpBtn.disabled = false;
-                verifyOtpBtn.innerText = "Verify and Enter";
+                showError(data.error || "Authentication failed.");
+                loginBtn.disabled = false;
+                loginBtn.innerText = "Authenticate & Enter";
             }
         } catch (e) {
             showError("Network error. Please try again.");
-            verifyOtpBtn.disabled = false;
-            verifyOtpBtn.innerText = "Verify and Enter";
+            loginBtn.disabled = false;
+            loginBtn.innerText = "Authenticate & Enter";
         }
     });
 
@@ -210,14 +167,14 @@ function setupLoginListeners() {
 
 function showLoginScreen() {
     document.getElementById('login-overlay').style.display = 'flex';
-    document.getElementById('step-phone').style.display = 'block';
-    document.getElementById('step-otp').style.display = 'none';
-    document.getElementById('phone-input').value = '9891399001';
-    document.getElementById('send-otp-btn').disabled = false;
-    document.getElementById('send-otp-btn').innerText = "Send OTP to Telegram Bot";
-    document.getElementById('verify-otp-btn').disabled = false;
-    document.getElementById('verify-otp-btn').innerText = "Verify and Enter";
-    document.getElementById('otp-input').value = '';
+    const phoneInput = document.getElementById('phone-input');
+    if (phoneInput) phoneInput.value = '9891399001';
+    
+    const loginBtn = document.getElementById('login-btn');
+    if (loginBtn) {
+        loginBtn.disabled = false;
+        loginBtn.innerText = "Authenticate & Enter";
+    }
     document.getElementById('login-error').style.display = 'none';
     document.getElementById('login-success').style.display = 'none';
 }

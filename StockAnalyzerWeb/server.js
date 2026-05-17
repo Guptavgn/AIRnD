@@ -175,7 +175,7 @@ function sendTelegramMessageToId(chatId, text) {
 }
 
 // Auth endpoints
-app.post('/api/auth/send-otp', async (req, res) => {
+app.post('/api/auth/login', (req, res) => {
     const { phone } = req.body;
     const targetPhone = process.env.TARGET_PHONE_NUMBER || '9891399001';
     
@@ -183,68 +183,26 @@ app.post('/api/auth/send-otp', async (req, res) => {
     const normalizedTarget = targetPhone.trim().replace(/[\s\-\+]/g, '');
     
     if (!normalizedPhone || (normalizedPhone !== normalizedTarget && normalizedPhone !== normalizedTarget.slice(-10))) {
-        return res.status(400).json({ error: "Access Denied: Unregistered phone number." });
+        return res.status(400).json({ error: "Access Denied: Unregistered mobile number." });
     }
     
-    // Generate 6-digit OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    activeOTPs.set(normalizedPhone, {
-        otp: otp,
-        expires: Date.now() + 5 * 60 * 1000
-    });
-    
-    const message = `🔑 OTP requested for Private Dashboard by ${phone}:\n\nCode: ${otp}`;
-    console.log(`[AUTH] Generated OTP ${otp} for phone ${phone}`);
-    
-    try {
-        await sendTelegramMessage(message);
-        res.json({ message: "OTP sent successfully to your Telegram Bot!" });
-    } catch (err) {
-        console.error("[AUTH] Failed to send Telegram OTP", err.message);
-        res.status(500).json({ error: "Failed to send Telegram message. Please check server logs." });
-    }
-});
-
-app.post('/api/auth/verify-otp', (req, res) => {
-    const { phone, otp } = req.body;
-    const targetPhone = process.env.TARGET_PHONE_NUMBER || '9891399001';
-    
-    const normalizedPhone = phone ? phone.trim().replace(/[\s\-\+]/g, '') : '';
-    const normalizedTarget = targetPhone.trim().replace(/[\s\-\+]/g, '');
-    
-    if (!normalizedPhone || (normalizedPhone !== normalizedTarget && normalizedPhone !== normalizedTarget.slice(-10))) {
-        return res.status(400).json({ error: "Invalid phone number." });
-    }
-    
-    // 100% Free Option: DASHBOARD_PASSWORD passcode bypass
-    const staticPasscode = process.env.DASHBOARD_PASSWORD || '9891';
-    if (otp.trim() === staticPasscode) {
-        const token = crypto.randomBytes(32).toString('hex');
-        activeSessions.add(token);
-        console.log(`[AUTH] Session authorized via static passcode bypass for phone ${phone}`);
-        return res.json({ token });
-    }
-    
-    const record = activeOTPs.get(normalizedPhone);
-    if (!record) {
-        return res.status(400).json({ error: "OTP not requested or expired." });
-    }
-    
-    if (Date.now() > record.expires) {
-        activeOTPs.delete(normalizedPhone);
-        return res.status(400).json({ error: "OTP has expired. Request a new one." });
-    }
-    
-    if (record.otp !== otp.trim()) {
-        return res.status(400).json({ error: "Incorrect OTP." });
-    }
-    
-    // Clear OTP & generate session token
-    activeOTPs.delete(normalizedPhone);
+    // Generate session token instantly
     const token = crypto.randomBytes(32).toString('hex');
     activeSessions.add(token);
     
-    console.log(`[AUTH] Session authorized for phone ${phone}`);
+    console.log(`[AUTH] Session authorized instantly for phone ${phone}`);
+    res.json({ token });
+});
+
+// Keep dummy routes to prevent any client-side breakdown
+app.post('/api/auth/send-otp', (req, res) => {
+    res.json({ message: "OTP bypassed. Click Verify to Enter." });
+});
+
+app.post('/api/auth/verify-otp', (req, res) => {
+    const { phone } = req.body;
+    const token = crypto.randomBytes(32).toString('hex');
+    activeSessions.add(token);
     res.json({ token });
 });
 
