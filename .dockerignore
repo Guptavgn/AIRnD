@@ -1,0 +1,7 @@
+node_modules
+StockAnalyzer/venv
+.venv
+__pycache__
+.git
+.env
+alerts.db

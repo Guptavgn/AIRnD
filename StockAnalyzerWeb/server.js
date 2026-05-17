@@ -6,6 +6,9 @@ const { spawn } = require('child_process');
 const db = require('./database');
 const path = require('path');
 
+const STOCK_ANALYZER_DIR = process.env.STOCK_ANALYZER_DIR || path.resolve(__dirname, '../StockAnalyzer');
+const PYTHON_PATH = process.env.PYTHON_PATH || path.join(STOCK_ANALYZER_DIR, 'venv', 'Scripts', 'python.exe');
+
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -124,16 +127,16 @@ app.get('/api/status', (req, res) => {
 
 // Control APIs
 app.post('/api/start-monitor', (req, res) => {
-    const pythonPath = 'd:/AIRnD/StockAnalyzer/venv/Scripts/python.exe';
-    const scriptPath = 'd:/AIRnD/StockAnalyzer/stock_analyzer.py';
+    const pythonPath = PYTHON_PATH;
+    const scriptPath = path.join(STOCK_ANALYZER_DIR, 'stock_analyzer.py');
     spawn(pythonPath, [scriptPath, 'monitor'], { detached: true, stdio: 'ignore' }).unref();
     res.json({ "message": "Python Monitor v2.0 started (Claude Sonnet primary LLM)." });
 });
 
 app.post('/api/trigger-analysis', (req, res) => {
-    const pythonPath = 'd:/AIRnD/StockAnalyzer/venv/Scripts/python.exe';
+    const pythonPath = PYTHON_PATH;
     const cmd = 'from stock_analyzer import hourly_monitor; hourly_monitor()';
-    spawn(pythonPath, ['-c', cmd], { cwd: 'd:/AIRnD/StockAnalyzer' });
+    spawn(pythonPath, ['-c', cmd], { cwd: STOCK_ANALYZER_DIR });
     systemStatus.lastScanTime = new Date().toISOString();
     systemStatus.totalScansToday++;
     res.json({ "message": "Manual analysis triggered (Claude Sonnet). Dashboard will update shortly." });
@@ -148,9 +151,9 @@ cron.schedule('0 0 * * *', () => {
 // Using node-cron with local system time (IST): minute 0, hours 9-16, Mon-Fri
 cron.schedule('0 9-16 * * 1-5', () => {
     console.log(`Executing Hourly Market Scan (Local Time: ${new Date().toLocaleTimeString()})...`);
-    const pythonPath = 'd:/AIRnD/StockAnalyzer/venv/Scripts/python.exe';
+    const pythonPath = PYTHON_PATH;
     const cmd = 'from stock_analyzer import hourly_monitor; hourly_monitor()';
-    spawn(pythonPath, ['-c', cmd], { cwd: 'd:/AIRnD/StockAnalyzer' });
+    spawn(pythonPath, ['-c', cmd], { cwd: STOCK_ANALYZER_DIR });
     systemStatus.lastScanTime = new Date().toISOString();
     systemStatus.totalScansToday++;
 });
@@ -158,9 +161,9 @@ cron.schedule('0 9-16 * * 1-5', () => {
 // AI Learning & Self-Correction (4:15 PM Local Time, Mon-Fri)
 cron.schedule('15 16 * * 1-5', () => {
     console.log('Intelligence Check: Running Daily Learning Engine...');
-    const pythonPath = 'd:/AIRnD/StockAnalyzer/venv/Scripts/python.exe';
-    const scriptPath = 'd:/AIRnD/StockAnalyzer/learning_engine.py';
-    spawn(pythonPath, [scriptPath], { cwd: 'd:/AIRnD/StockAnalyzer' });
+    const pythonPath = PYTHON_PATH;
+    const scriptPath = path.join(STOCK_ANALYZER_DIR, 'learning_engine.py');
+    spawn(pythonPath, [scriptPath], { cwd: STOCK_ANALYZER_DIR });
 });
 
 // Reset daily scan count at midnight
@@ -171,7 +174,7 @@ cron.schedule('0 0 * * *', () => {
 // 30-day price history for charts
 app.get('/api/history/:ticker', (req, res) => {
     const ticker = req.params.ticker;
-    const pythonPath = 'd:/AIRnD/StockAnalyzer/venv/Scripts/python.exe';
+    const pythonPath = PYTHON_PATH;
     const cmd = `import yfinance as yf; import json; import pandas as pd; h = yf.download('${ticker}', period='1mo', interval='1d'); 
 if isinstance(h.columns, pd.MultiIndex): h.columns = h.columns.droplevel(1);
 data = h['Close'].tolist() if 'Close' in h.columns else [];
@@ -194,7 +197,7 @@ let lastCacheUpdateTime = null;
 
 function updateMarketTrendingCache() {
     lastCacheUpdateTime = new Date().toISOString();
-    const pythonPath = 'd:/AIRnD/StockAnalyzer/venv/Scripts/python.exe';
+    const pythonPath = PYTHON_PATH;
     const cmd = `import yfinance as yf; import json; import pandas as pd; 
 tickers = ['RELIANCE.NS','TCS.NS','HDFCBANK.NS','ICICIBANK.NS','BHARTIARTL.NS','SBIN.NS','INFY.NS','LICI.NS','ITC.NS','HINDUNILVR.NS','LT.NS','BAJFINANCE.NS'];
 data = yf.download(' '.join(tickers), period='2d', interval='1d', progress=False);
@@ -224,7 +227,7 @@ app.get('/api/latest-prices', (req, res) => {
     const tickers = req.query.tickers ? req.query.tickers.split(',') : [];
     if (tickers.length === 0) return res.json({});
 
-    const pythonPath = 'd:/AIRnD/StockAnalyzer/venv/Scripts/python.exe';
+    const pythonPath = PYTHON_PATH;
     const cmd = `import yfinance as yf; import json; import pandas as pd; 
 data = yf.download('${tickers.join(' ')}', period='1d', interval='1m', progress=False);
 if not data.empty:
